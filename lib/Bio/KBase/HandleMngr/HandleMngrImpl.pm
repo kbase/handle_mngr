@@ -28,6 +28,7 @@ use Data::Dumper;
 use strict;
 use warnings;
 
+use Bio::KBase::AuthToken;
 use Bio::KBase::HandleMngrConstants 'adminToken';
 use Bio::KBase::HandleService;
 
@@ -41,45 +42,43 @@ sub new
     bless $self, $class;
     #BEGIN_CONSTRUCTOR
 
-    our $cfg = {};
+	our $cfg = {};
 
-    if (defined $ENV{KB_DEPLOYMENT_CONFIG} && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
-	$cfg = new Config::Simple($ENV{KB_DEPLOYMENT_CONFIG}) or
-	    die "Can not create Config object";
-	print STDERR "Using $ENV{KB_DEPLOYMENT_CONFIG} for configs\n";
-    }
-    else{
-	print STDERR "Can't find config.\n" ;
-    }
-
-    my $login    = $cfg->param('HandleMngr.admin-login')    || undef;
-    my $password = $cfg->param('HandleMngr.admin-password') || undef;
-
-
-    if ($login){
-	print STDERR "Creating admin token\n" ;
-	my $msg       = `kbase-login $login -p $password`;
-	my $lcfg_file = $ENV{HOME}."/.kbase_config" ;
-
-	print STDERR $msg , "\n";
-
-	unless(-f $lcfg_file){
-	    print STDERR "Can't find file $lcfg_file\n";
-	    exit;
+	if (defined $ENV{KB_DEPLOYMENT_CONFIG} && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
+		$cfg = new Config::Simple($ENV{KB_DEPLOYMENT_CONFIG}) or
+			die "Can not create Config object";
+		print STDERR "Using $ENV{KB_DEPLOYMENT_CONFIG} for configs\n";
+	}
+	else {
+		print STDERR "Can't find config.\n" ;
 	}
 
-	my $lcfg = new Config::Simple( filename=> $lcfg_file ,
-				       syntax=>'ini') or die "can not create Config object";
+	my $login    = $cfg->param('HandleMngr.admin-login');
+	if (ref $login eq 'ARRAY') {
+		$login = undef;
+	}
+	my $password = $cfg->param('HandleMngr.admin-password');
+	if (ref $password eq 'ARRAY') {
+		$password = undef;
+	}
 	
+	$self->{handle_url} = $cfg->param('HandleMngr.handle-service-url');
+	if (ref $self->{handle_url} eq 'ARRAY') {
+		$self->{handle_url} = undef
+	}
 	
-	$self->{'admin-token'} = $lcfg->param('authentication.token');
-	
-	$msg = `kbase-logout` ;
-    }
-    else{
-	print STDERR "No admin user found.\n" ;
-    }
-
+	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
+	my @allowed_users_filtered = grep defined, @$allowed_users;
+	$self->{allowed_users} = \@allowed_users_filtered;
+		
+	print STDERR "Creating admin token\n" ;
+	my $token = Bio::KBase::AuthToken->new(
+		user_id => $login, password => $password);
+	if (!defined($token->token())) {
+		die "Login as $login failed.\n";
+	} else {
+		$self->{'admin-token'} = $token->token();
+	}
 
     #END_CONSTRUCTOR
 
@@ -180,7 +179,7 @@ sub is_readable
 
 =head2 add_read_acl
 
-  $return = $obj->add_read_acl($wstoken, $hids, $username)
+  $obj->add_read_acl($hids, $username)
 
 =over 4
 
@@ -189,10 +188,8 @@ sub is_readable
 =begin html
 
 <pre>
-$wstoken is a string
-$hids is a reference to a list where each element is a HandleId
+$hids is a reference to a list where each element is a HandleMngr.HandleId
 $username is a string
-$return is an int
 HandleId is a string
 
 </pre>
@@ -201,10 +198,8 @@ HandleId is a string
 
 =begin text
 
-$wstoken is a string
-$hids is a reference to a list where each element is a HandleId
+$hids is a reference to a list where each element is a HandleMngr.HandleId
 $username is a string
-$return is an int
 HandleId is a string
 
 
@@ -223,10 +218,9 @@ HandleId is a string
 sub add_read_acl
 {
     my $self = shift;
-    my($wstoken, $hids, $username) = @_;
+    my($hids, $username) = @_;
 
     my @_bad_arguments;
-    (!ref($wstoken)) or push(@_bad_arguments, "Invalid type for argument \"wstoken\" (value was \"$wstoken\")");
     (ref($hids) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"hids\" (value was \"$hids\")");
     (!ref($username)) or push(@_bad_arguments, "Invalid type for argument \"username\" (value was \"$username\")");
     if (@_bad_arguments) {
@@ -236,63 +230,58 @@ sub add_read_acl
     }
 
     my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
-    my($return);
     #BEGIN add_read_acl
 
-	$return = 0;
-	my $admin_token = adminToken;
+	my $has_user = 0;
+	foreach my $user (@{$self->{allowed_users}}) {
+		if ($user eq $ctx->{user_id}) {
+			$has_user = 1;
+			last;
+		}
+	}
+	if (!$has_user) {
+		die "User $ctx->{user_id} may not run this method"
+	}
+	
 	my @handles = ();
 
 	# given a list of handle ids, get the handles
 	my $client = Bio::KBase::HandleService->new();
+	#TODO get handles from handle service (need handle service url in makefile)
 	# @handles = $client->hids_to_handles($hids);
 
 	# given a list of handles, update the acl of handle->{id}
 
-	# is the person identified by $wstoken the owner of the
-	# node referenced by $handle. We're not going to update
-	# any nodes unless $wstoken owns al the handles.
-
-	# TODO get userid from token
-	my $userid = '';
-
-	foreach my $handle (@handles) {
-		# TODO if not owner then die, die, die!
-	}
-
-	# if we make it this far, then wstoken owns all the nodes
+	my $admin_token = $self->{'admin-token'};
+	my @failed = ();
 	foreach my $handle (@handles) {
 
-		my $nodeurl = $handle->{url} . '/' . $handle->{id};
+		my $nodeurl = $handle->{url} . '/node/' . $handle->{id};
 		my $ua = LWP::UserAgent->new();
 
-		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token  ) ;
+		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
 		print STDERR Dumper $header ;
 
-		my $req = new HTTP::Request("PUT",$nodeurl."/acl/read?users=$userid",HTTP::Headers->new('Authorization' => "OAuth " . $self->{'admin-token'}  ));
+		my $req = new HTTP::Request("PUT",$nodeurl."/acl/read?users=$username",HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
-			$return += 1;
 			print STDERR "Success: " . $put->message , "\n" ;
 			print STDERR "Success: " . $put->content , "\n";
 		}
 		else {
+			push @failed, $handle->{hid};
 			print STDERR "Error: " . $put->message , "\n" ;
 			print STDERR "Error: " . $put->content , "\n";
 		}
 	}
+	if (@failed) {
+		die "Unable to set acls on handles " . join(", ", @failed);
+	}
 
 
     #END add_read_acl
-    my @_bad_returns;
-    (!ref($return)) or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
-    if (@_bad_returns) {
-	my $msg = "Invalid returns passed to add_read_acl:\n" . join("", map { "\t$_\n" } @_bad_returns);
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-							       method_name => 'add_read_acl');
-    }
-    return($return);
+    return();
 }
 
 
@@ -345,8 +334,8 @@ sub version {
 =item Description
 
 The add_read_acl functions will update the acl of the shock
-node that the handle references if the owner of the token
-is the owner of the underlying shock node. The underlying
+node that the handle references. The function is only accessible to a 
+specific list of users specified at startup time. The underlying
 shock node will be made readable to the user requested.
 
 

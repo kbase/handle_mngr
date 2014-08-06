@@ -13,11 +13,11 @@ module HandleMngr {
 		optional;
 
 	/* The add_read_acl functions will update the acl of the shock
-	  node that the handle references if the owner of the token
-	  is the owner of the underlying shock node. The underlying
+	  node that the handle references. The function is only accessible to a 
+	  specific list of users specified at startup time. The underlying
 	  shock node will be made readable to the user requested.
 	*/
 	typedef string HandleId;
-	funcdef add_read_acl(string wstoken, list<HandleId> hids, string username)
-		returns (int) authentication required;
+	funcdef add_read_acl(list<HandleId> hids, string username)
+		returns () authentication required;
 };
