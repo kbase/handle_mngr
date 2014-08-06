@@ -68,8 +68,13 @@ sub new
 	}
 	
 	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
-	my @allowed_users_filtered = grep defined, @$allowed_users;
-	$self->{allowed_users} = \@allowed_users_filtered;
+	if (ref $allowed_users eq 'ARRAY') {
+		my @allowed_users_filtered = grep defined, @$allowed_users;
+		$self->{allowed_users} = \@allowed_users_filtered;
+	} else {
+		$self->{allowed_users} = [$allowed_users];
+	}
+	print STDERR "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . "]\n";
 		
 	print STDERR "Creating admin token\n" ;
 	my $token = Bio::KBase::AuthToken->new(
@@ -240,7 +245,7 @@ sub add_read_acl
 		}
 	}
 	if (!$has_user) {
-		die "User $ctx->{user_id} may not run this method"
+		die "User $ctx->{user_id} may not run the add_read_acl method"
 	}
 	
 	my @handles = ();
