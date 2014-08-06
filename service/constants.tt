@@ -1,0 +1,11 @@
+package Bio::KBase::HandleMngrConstants;
+
+use constant	adminToken => '[% shock_admin_token %]';
+
+
+use Exporter qw(import);
+our @EXPORT_OK = qw(adminToken);
+our %EXPORT_TAGS = ( all => [ 'adminToken', ] );
+
+
+1;

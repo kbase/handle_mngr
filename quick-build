@@ -1,0 +1,9 @@
+/kb/deployment/services/handle_mngr/stop_service
+cd ../..
+source user-env.sh
+make
+make deploy
+source /kb/deployment/user-env.sh
+/kb/deployment/services/handle_mngr/start_service &
+cd modules
+cd handle_mngr

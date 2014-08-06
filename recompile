@@ -1,0 +1,8 @@
+compile_typespec \
+		--psgi HandleMngr.psgi  \
+		--impl Bio::KBase::HandleMngr::HandleMngrImpl \
+		--service Bio::KBase::HandleMngr::Service \
+		--client Bio::KBase::HandleMngr::Client \
+		--py biokbase/HandleMngr/Client \
+		--js javascript/HandleMngr/Client \
+		handle_mngr.spec lib

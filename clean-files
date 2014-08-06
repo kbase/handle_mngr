@@ -1,0 +1,13 @@
+#!/bin/sh
+
+rm -rf	pod2htmd.tmp
+rm service/HandleMngr.conf 
+rm docs/HandleMngr.html
+rm lib/HandleMngrImpl.py.bak-*
+rm -r lib/biokbase
+rm -r lib/javascript
+rm -r lib/HandleMngr.psgi
+rm -r lib/HandleMngrServer.py 
+rm lib/Bio/KBase/HandleMngr/HandleMngrImpl.pm.bak-*
+rm lib/Bio/KBase/HandleMngr/Client.pm 
+rm lib/Bio/KBase/HandleMngr/Service.pm 

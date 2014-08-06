@@ -1,0 +1,8 @@
+pod2htmd.tmp
+docs/HandleMngr.html
+lib/Bio/KBase/HandleMngr/Client.pm
+lib/Bio/KBase/HandleMngr/HandleMngrImpl.pm.bak-*
+lib/Bio/KBase/HandleMngr/Service.pm
+lib/HandleMngr.psgi
+lib/HandleMngrImpl.py.bak-*
+lib/HandleMngrServer.py
