@@ -248,18 +248,21 @@ sub add_read_acl
 		die "User $ctx->{user_id} may not run the add_read_acl method"
 	}
 	
-	my @handles = ();
 
+	my $client;
 	# given a list of handle ids, get the handles
-	my $client = Bio::KBase::HandleService->new();
-	#TODO get handles from handle service (need handle service url in makefile)
-	# @handles = $client->hids_to_handles($hids);
+	if ($self->{handle_url}) {
+		$client = Bio::KBase::HandleService->new($self->{handle_url});
+	} else {
+		$client = Bio::KBase::HandleService->new();
+	}
+	my $handles = $client->hids_to_handles($hids);
 
+	
 	# given a list of handles, update the acl of handle->{id}
-
 	my $admin_token = $self->{'admin-token'};
-	my @failed = ();
-	foreach my $handle (@handles) {
+	my %succeeded;
+	foreach my $handle (@$handles) {
 
 		my $nodeurl = $handle->{url} . '/node/' . $handle->{id};
 		my $ua = LWP::UserAgent->new();
@@ -271,17 +274,24 @@ sub add_read_acl
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
+			$succeeded{$handle->{hid}} = 1;
 			print STDERR "Success: " . $put->message , "\n" ;
 			print STDERR "Success: " . $put->content , "\n";
 		}
 		else {
-			push @failed, $handle->{hid};
+			$succeeded{$handle->{hid}} = 0;
 			print STDERR "Error: " . $put->message , "\n" ;
 			print STDERR "Error: " . $put->content , "\n";
 		}
 	}
+	my @failed = ();
+	foreach my $hid (@$hids) {
+		if (!($succeeded{$hid})) {
+			push @failed, $hid;
+		}
+	}
 	if (@failed) {
-		die "Unable to set acls on handles " . join(", ", @failed);
+		die "Unable to set acl(s) on handles " . join(", ", @failed);
 	}
 
 
