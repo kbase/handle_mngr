@@ -68,8 +68,13 @@ sub new
 	}
 	
 	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
-	my @allowed_users_filtered = grep defined, @$allowed_users;
-	$self->{allowed_users} = \@allowed_users_filtered;
+	if (ref $allowed_users eq 'ARRAY') {
+		my @allowed_users_filtered = grep defined, @$allowed_users;
+		$self->{allowed_users} = \@allowed_users_filtered;
+	} else {
+		$self->{allowed_users} = [$allowed_users];
+	}
+	print STDERR "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . "]\n";
 		
 	print STDERR "Creating admin token\n" ;
 	my $token = Bio::KBase::AuthToken->new(
@@ -240,21 +245,24 @@ sub add_read_acl
 		}
 	}
 	if (!$has_user) {
-		die "User $ctx->{user_id} may not run this method"
+		die "User $ctx->{user_id} may not run the add_read_acl method"
 	}
 	
-	my @handles = ();
 
+	my $client;
 	# given a list of handle ids, get the handles
-	my $client = Bio::KBase::HandleService->new();
-	#TODO get handles from handle service (need handle service url in makefile)
-	# @handles = $client->hids_to_handles($hids);
+	if ($self->{handle_url}) {
+		$client = Bio::KBase::HandleService->new($self->{handle_url});
+	} else {
+		$client = Bio::KBase::HandleService->new();
+	}
+	my $handles = $client->hids_to_handles($hids);
 
+	
 	# given a list of handles, update the acl of handle->{id}
-
 	my $admin_token = $self->{'admin-token'};
-	my @failed = ();
-	foreach my $handle (@handles) {
+	my %succeeded;
+	foreach my $handle (@$handles) {
 
 		my $nodeurl = $handle->{url} . '/node/' . $handle->{id};
 		my $ua = LWP::UserAgent->new();
@@ -266,17 +274,24 @@ sub add_read_acl
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
+			$succeeded{$handle->{hid}} = 1;
 			print STDERR "Success: " . $put->message , "\n" ;
 			print STDERR "Success: " . $put->content , "\n";
 		}
 		else {
-			push @failed, $handle->{hid};
+			$succeeded{$handle->{hid}} = 0;
 			print STDERR "Error: " . $put->message , "\n" ;
 			print STDERR "Error: " . $put->content , "\n";
 		}
 	}
+	my @failed = ();
+	foreach my $hid (@$hids) {
+		if (!($succeeded{$hid})) {
+			push @failed, $hid;
+		}
+	}
 	if (@failed) {
-		die "Unable to set acls on handles " . join(", ", @failed);
+		die "Unable to set acl(s) on handles " . join(", ", @failed);
 	}
 
 
