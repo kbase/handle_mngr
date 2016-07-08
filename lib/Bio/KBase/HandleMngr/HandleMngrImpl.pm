@@ -214,7 +214,10 @@ HandleId is a string
 
 =item Description
 
-
+The add_read_acl function will update the acl of the shock
+node that the handle references. The function is only accessible to a 
+specific list of users specified at startup time. The underlying
+shock node will be made readable to the user requested.
 
 =back
 
@@ -302,6 +305,123 @@ sub add_read_acl
 
 
 
+=head2 set_public_read
+
+  $obj->set_public_read($hids)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$hids is a reference to a list where each element is a HandleMngr.HandleId
+HandleId is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$hids is a reference to a list where each element is a HandleMngr.HandleId
+HandleId is a string
+
+
+=end text
+
+
+
+=item Description
+
+The set_public_read function will update the acl of the shock
+node that the handle references to make the node globally readable.
+The function is only accessible to a specific list of users specified
+at startup time.
+
+=back
+
+=cut
+
+sub set_public_read
+{
+    my $self = shift;
+    my($hids) = @_;
+
+    my @_bad_arguments;
+    (ref($hids) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"hids\" (value was \"$hids\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to set_public_read:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'set_public_read');
+    }
+
+    my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
+    #BEGIN set_public_read
+
+	my $has_user = 0;
+	foreach my $user (@{$self->{allowed_users}}) {
+		if ($user eq $ctx->{user_id}) {
+			$has_user = 1;
+			last;
+		}
+	}
+	if (!$has_user) {
+		die "User $ctx->{user_id} may not run the set_public_read method"
+	}
+	
+
+	my $client;
+	# given a list of handle ids, get the handles
+	if ($self->{handle_url}) {
+		$client = Bio::KBase::HandleService->new($self->{handle_url});
+	} else {
+		$client = Bio::KBase::HandleService->new();
+	}
+	my $handles = $client->hids_to_handles($hids);
+	
+	# given a list of handles, update the acl of handle->{id}
+	my $admin_token = $self->{'admin-token'};
+	my %succeeded;
+	foreach my $handle (@$handles) {
+
+		my $nodeurl = $handle->{url} . '/node/' . $handle->{id} . "/acl/public_read";
+		my $ua = LWP::UserAgent->new();
+
+		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
+		print STDERR Dumper $header ;
+
+		my $req = new HTTP::Request("PUT", $nodeurl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
+		$ua->prepare_request($req);
+		my $put = $ua->send_request($req);
+		if ($put->is_success) {
+			$succeeded{$handle->{hid}} = 1;
+			print STDERR "Success: " . $put->message , "\n" ;
+			print STDERR "Success: " . $put->content , "\n";
+		}
+		else {
+			$succeeded{$handle->{hid}} = 0;
+			print STDERR "Error: " . $put->message , "\n" ;
+			print STDERR "Error: " . $put->content , "\n";
+		}
+	}
+	my @failed = ();
+	foreach my $hid (@$hids) {
+		if (!($succeeded{$hid})) {
+			push @failed, $hid;
+		}
+	}
+	if (@failed) {
+		die "Unable to set acl(s) on handles " . join(", ", @failed);
+	}
+    #END set_public_read
+    return();
+}
+
+
+
+
 =head2 version 
 
   $return = $obj->version()
@@ -344,14 +464,6 @@ sub version {
 
 =over 4
 
-
-
-=item Description
-
-The add_read_acl functions will update the acl of the shock
-node that the handle references. The function is only accessible to a 
-specific list of users specified at startup time. The underlying
-shock node will be made readable to the user requested.
 
 
 =item Definition
