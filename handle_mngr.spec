@@ -12,12 +12,21 @@ module HandleMngr {
 	funcdef is_readable(string token, string nodeurl) returns(int) authentication
 		optional;
 
-	/* The add_read_acl functions will update the acl of the shock
+	typedef string HandleId;
+
+	/* The add_read_acl function will update the acl of the shock
 	  node that the handle references. The function is only accessible to a 
 	  specific list of users specified at startup time. The underlying
 	  shock node will be made readable to the user requested.
 	*/
-	typedef string HandleId;
 	funcdef add_read_acl(list<HandleId> hids, string username)
+		returns () authentication required;
+
+	/* The set_public_read function will update the acl of the shock
+	  node that the handle references to make the node globally readable.
+	  The function is only accessible to a specific list of users specified
+	  at startup time.
+	*/
+	funcdef set_public_read(list<HandleId> hids)
 		returns () authentication required;
 };

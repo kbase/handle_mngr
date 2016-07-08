@@ -214,7 +214,10 @@ HandleId is a string
 
 =item Description
 
-
+The add_read_acl function will update the acl of the shock
+node that the handle references. The function is only accessible to a 
+specific list of users specified at startup time. The underlying
+shock node will be made readable to the user requested.
 
 =back
 
@@ -302,6 +305,67 @@ sub add_read_acl
 
 
 
+=head2 set_public_read
+
+  $obj->set_public_read($hids)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$hids is a reference to a list where each element is a HandleMngr.HandleId
+HandleId is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$hids is a reference to a list where each element is a HandleMngr.HandleId
+HandleId is a string
+
+
+=end text
+
+
+
+=item Description
+
+The set_public_read function will update the acl of the shock
+node that the handle references to make the node globally readable.
+The function is only accessible to a specific list of users specified
+at startup time.
+
+=back
+
+=cut
+
+sub set_public_read
+{
+    my $self = shift;
+    my($hids) = @_;
+
+    my @_bad_arguments;
+    (ref($hids) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"hids\" (value was \"$hids\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to set_public_read:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'set_public_read');
+    }
+
+    my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
+    #BEGIN set_public_read
+    #END set_public_read
+    return();
+}
+
+
+
+
 =head2 version 
 
   $return = $obj->version()
@@ -344,14 +408,6 @@ sub version {
 
 =over 4
 
-
-
-=item Description
-
-The add_read_acl functions will update the acl of the shock
-node that the handle references. The function is only accessible to a 
-specific list of users specified at startup time. The underlying
-shock node will be made readable to the user requested.
 
 
 =item Definition
