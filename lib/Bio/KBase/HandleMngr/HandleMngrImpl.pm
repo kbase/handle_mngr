@@ -53,13 +53,18 @@ sub new
 		print STDERR "Can't find config.\n" ;
 	}
 
-	my $login    = $cfg->param('HandleMngr.admin-login');
+	my $login = $cfg->param('HandleMngr.admin-login');
 	if (ref $login eq 'ARRAY') {
 		$login = undef;
 	}
 	my $password = $cfg->param('HandleMngr.admin-password');
 	if (ref $password eq 'ARRAY') {
 		$password = undef;
+	}
+
+	my $token = $cfg->param('HandleMngr.admin-token');
+	if (ref $token eq 'ARRAY') {
+		$token = undef;
 	}
 	
 	$self->{handle_url} = $cfg->param('HandleMngr.handle-service-url');
@@ -77,12 +82,20 @@ sub new
 	print STDERR "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . "]\n";
 		
 	print STDERR "Creating admin token\n" ;
-	my $token = Bio::KBase::AuthToken->new(
+	my $authtoken;
+	if ($token) {
+		$authtoken = Bio::KBase::AuthToken->new(token => $token);
+		if (!$authtoken->validate()) {
+			die "Login with admin-token failed: " . $authtoken->error_message;
+		}
+	} else {
+		$authtoken = Bio::KBase::AuthToken->new(
 		user_id => $login, password => $password);
-	if (!defined($token->token())) {
+	}
+	if (!defined($authtoken->token())) {
 		die "Login as $login failed.\n";
 	} else {
-		$self->{'admin-token'} = $token->token();
+		$self->{'admin-token'} = $authtoken->token();
 	}
 
     #END_CONSTRUCTOR
