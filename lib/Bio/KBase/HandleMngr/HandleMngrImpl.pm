@@ -3,7 +3,9 @@ use strict;
 use Bio::KBase::Exceptions;
 # Use Semantic Versioning (2.0.0-rc.1)
 # http://semver.org 
-our $VERSION = "0.1.0";
+our $VERSION = "0.2.0";
+our $GIT_URL = "https://github.com/kkellerlbl/handle_mngr";
+our $GIT_COMMIT_HASH = "3509e85ae48ebc7dae9683b9d9a297b3bc5e203c";
 
 =head1 NAME
 
@@ -71,6 +73,19 @@ sub new
 	if (ref $self->{handle_url} eq 'ARRAY') {
 		$self->{handle_url} = undef
 	}
+        unless ($self->{handle_url}) {
+            die 'no handle-service-url supplied, can not continue';
+        }           
+	
+	$self->{auth_srv} = $cfg->param('HandleMngr.auth-service-url');
+	if (ref $self->{auth_srv} eq 'ARRAY') {
+		$self->{auth_srv} = undef
+	}
+        unless ($self->{auth_srv}) {
+            $self->{auth_srv} = $Bio::KBase::Auth::AuthorizePathDefault;
+            warn 'no auth-service-url supplied, using default';
+        }
+        warn 'using auth-service-url ' . $self->{auth_srv};
 	
 	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
 	if (ref $allowed_users eq 'ARRAY') {
@@ -79,24 +94,31 @@ sub new
 	} else {
 		$self->{allowed_users} = [$allowed_users];
 	}
-	print STDERR "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . "]\n";
+	warn "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . ']';
 		
-	print STDERR "Creating admin token\n" ;
 	my $authtoken;
 	if ($token) {
-		$authtoken = Bio::KBase::AuthToken->new(token => $token);
-		if (!$authtoken->validate()) {
-			die "Login with admin-token failed: " . $authtoken->error_message;
-		}
-	} else {
+        	warn 'Creating admin token from supplied token';
 		$authtoken = Bio::KBase::AuthToken->new(
-		user_id => $login, password => $password);
-	}
+                    auth_svc=>$self->{'auth_srv'}, ignore_authrc=>1, token => $token);
+		if (!$authtoken->validate()) {
+			die "Login with admin token failed: " . $authtoken->error_message;
+		}
+	} elsif ($login and $password) {
+        	warn 'Creating admin token from username and password';
+		$authtoken = Bio::KBase::AuthToken->new(
+		    auth_svc=>$self->{'auth_srv'}, ignore_authrc=>1, user_id => $login, password => $password);
+	} else {
+            die 'No token or id/pw supplied, can not continue';
+        }
+
 	if (!defined($authtoken->token())) {
-		die "Login as $login failed.\n";
+		die "Login as $login failed";
 	} else {
 		$self->{'admin-token'} = $authtoken->token();
 	}
+
+        warn 'HandleMngr ready for queries';
 
     #END_CONSTRUCTOR
 
@@ -169,18 +191,26 @@ sub is_readable
     my($return);
     #BEGIN is_readable
 
-	print Dumper $ctx;
-	my $ua = LWP::UserAgent->new();
-	my $req = new HTTP::Request("GET",$nodeurl,HTTP::Headers->new('Authorization' => "OAuth $token"));
-    $ua->prepare_request($req);
-    my $get = $ua->send_request($req);
-    if ($get->is_success) {
-        $return = 1;
-	print STDERR "MSG (is_readable): " .  $get->content , "\n";
+#	print Dumper $ctx;
+    if ($nodeurl)
+    {
+        my $ua = LWP::UserAgent->new();
+        my $req = new HTTP::Request("GET",$nodeurl);
+        $req = new HTTP::Request("GET",$nodeurl,HTTP::Headers->new('Authorization' => "OAuth $token")) if ($token);
+        $ua->prepare_request($req);
+        my $get = $ua->send_request($req);
+        if ($get->is_success) {
+            $return = 1;
+            #warn "MSG (is_readable): " .  $get->content;
+        }
+        else{
+	    $return = 0;
+        }
+    } else
+    {
+        $return = 0;
     }
-    else{
-	$return = 0;
-    }
+
     #END is_readable
     my @_bad_returns;
     (!ref($return)) or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
@@ -435,9 +465,9 @@ sub set_public_read
 
 
 
-=head2 version 
+=head2 status 
 
-  $return = $obj->version()
+  $return = $obj->status()
 
 =over 4
 
@@ -459,14 +489,19 @@ $return is a string
 
 =item Description
 
-Return the module version. This is a Semantic Versioning number.
+Return the module status. This is a structure including Semantic Versioning number, state and git info.
 
 =back
 
 =cut
 
-sub version {
-    return $VERSION;
+sub status {
+    my($return);
+    #BEGIN_STATUS
+    $return = {"state" => "OK", "message" => "", "version" => $VERSION,
+               "git_url" => $GIT_URL, "git_commit_hash" => $GIT_COMMIT_HASH};
+    #END_STATUS
+    return($return);
 }
 
 =head1 TYPES
