@@ -5,7 +5,7 @@ use Bio::KBase::Exceptions;
 # http://semver.org 
 our $VERSION = "0.2.0";
 our $GIT_URL = "https://github.com/kkellerlbl/handle_mngr";
-our $GIT_COMMIT_HASH = "3509e85ae48ebc7dae9683b9d9a297b3bc5e203c";
+our $GIT_COMMIT_HASH = "ce13d245839b54a7db48b3befd5ce0f47d07757b";
 
 =head1 NAME
 
@@ -77,15 +77,15 @@ sub new
             die 'no handle-service-url supplied, can not continue';
         }           
 	
-	$self->{auth_srv} = $cfg->param('HandleMngr.auth-service-url');
-	if (ref $self->{auth_srv} eq 'ARRAY') {
-		$self->{auth_srv} = undef
+	$self->{auth_svc} = $cfg->param('HandleMngr.auth-service-url');
+	if (ref $self->{auth_svc} eq 'ARRAY') {
+		$self->{auth_svc} = undef
 	}
-        unless ($self->{auth_srv}) {
-            $self->{auth_srv} = $Bio::KBase::Auth::AuthorizePathDefault;
+        unless ($self->{auth_svc}) {
+            $self->{auth_svc} = $Bio::KBase::Auth::AuthorizePathDefault;
             warn 'no auth-service-url supplied, using default';
         }
-        warn 'using auth-service-url ' . $self->{auth_srv};
+        warn 'using auth-service-url ' . $self->{auth_svc};
 	
 	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
 	if (ref $allowed_users eq 'ARRAY') {
@@ -97,28 +97,40 @@ sub new
 	warn "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . ']';
 		
 	my $authtoken;
+        
+        # the number of simultaneous requests may be overloading the current
+        # auth service.  Occasionally I see read timeouts with the
+        # default AuthToken LWP timeout (10s).  There's no point in
+        # fixing the current auth service, so as a stopgap measure,
+        # try to spread out the requests so they're less likely to
+        # timeout.  When the new auth service is ready we should remove
+        # this sleep and make sure it performs okay (and if not, perhaps
+        # the issue is in the client libs)
+        sleep(int(rand(15)));
+
 	if ($token) {
         	warn 'Creating admin token from supplied token';
 		$authtoken = Bio::KBase::AuthToken->new(
-                    auth_svc=>$self->{'auth_srv'}, ignore_authrc=>1, token => $token);
+                    auth_svc=>$self->{'auth_svc'}, ignore_authrc=>1, token => $token);
 		if (!$authtoken->validate()) {
 			die "Login with admin token failed: " . $authtoken->error_message;
 		}
 	} elsif ($login and $password) {
         	warn 'Creating admin token from username and password';
 		$authtoken = Bio::KBase::AuthToken->new(
-		    auth_svc=>$self->{'auth_srv'}, ignore_authrc=>1, user_id => $login, password => $password);
+		    auth_svc=>$self->{'auth_svc'}, ignore_authrc=>1, user_id => $login, password => $password);
 	} else {
             die 'No token or id/pw supplied, can not continue';
         }
 
 	if (!defined($authtoken->token())) {
-		die "Login as $login failed";
+                warn 'received an error from auth: ' . $authtoken->{'error_message'};
+		die "Login as $login failed in pid $$";
 	} else {
 		$self->{'admin-token'} = $authtoken->token();
 	}
 
-        warn 'HandleMngr ready for queries';
+        warn "HandleMngr at pid $$ ready for queries";
 
     #END_CONSTRUCTOR
 
@@ -314,20 +326,19 @@ sub add_read_acl
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
-		print STDERR Dumper $header ;
 
 		my $req = new HTTP::Request("PUT",$nodeurl."/acl/read?users=$username",HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
 			$succeeded{$handle->{hid}} = 1;
-			print STDERR "Success: " . $put->message , "\n" ;
-			print STDERR "Success: " . $put->content , "\n";
+			warn "Success: " . $put->message;
+			warn "Success: " . $put->content;
 		}
 		else {
 			$succeeded{$handle->{hid}} = 0;
-			print STDERR "Error: " . $put->message , "\n" ;
-			print STDERR "Error: " . $put->content , "\n";
+			warn "Error: " . $put->message;
+			warn "Error: " . $put->content;
 		}
 	}
 	my @failed = ();
@@ -433,20 +444,19 @@ sub set_public_read
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
-		print STDERR Dumper $header ;
 
 		my $req = new HTTP::Request("PUT", $nodeurl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
 			$succeeded{$handle->{hid}} = 1;
-			print STDERR "Success: " . $put->message , "\n" ;
-			print STDERR "Success: " . $put->content , "\n";
+			warn "Success: " . $put->message;
+			warn "Success: " . $put->content;
 		}
 		else {
 			$succeeded{$handle->{hid}} = 0;
-			print STDERR "Error: " . $put->message , "\n" ;
-			print STDERR "Error: " . $put->content , "\n";
+			warn "Error: " . $put->message;
+			warn "Error: " . $put->content;
 		}
 	}
 	my @failed = ();
