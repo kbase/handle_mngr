@@ -337,8 +337,8 @@ sub add_read_acl
                         next;                    
                 }
                 
-                my $jsonUsers=from_json($getResult->content);
-                my $users=$jsonUsers->{'data'}{'read'};
+                my $jsonAcls=from_json($getResult->content);
+                my $users=$jsonAcls->{'data'}{'read'};
                 
                 if (grep { $_->{'username'} eq $username } @$users) {
 		    $succeeded{$handle->{hid}} = 1;
@@ -465,6 +465,26 @@ sub set_public_read
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
+
+                $ua->default_headers($header);
+
+                my $getResult = $ua->get($nodeurl."/acl?verbosity=full");
+                if (!$getResult->is_success) {
+			$succeeded{$handle->{hid}} = 0;
+			warn "Error: " . $getResult->message;
+			warn "Error: " . $getResult->content;
+                        next;                    
+                }
+
+                my $jsonAcls=from_json($getResult->content);
+
+                if ($jsonAcls->{'data'}{'public'}{'read'}) {
+		    $succeeded{$handle->{hid}} = 1;
+                    warn "public already has read access on $nodeurl, skipping PUT";
+                    next;
+                }
+
+                warn "setting read ACL on $nodeurl for public";
 
 		my $req = new HTTP::Request("PUT", $nodeurl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
