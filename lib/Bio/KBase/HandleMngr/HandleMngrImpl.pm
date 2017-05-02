@@ -461,7 +461,7 @@ sub set_public_read
 	my %succeeded;
 	foreach my $handle (@$handles) {
 
-		my $nodeurl = $handle->{url} . '/node/' . $handle->{id} . "/acl/public_read";
+		my $nodeurl = $handle->{url} . '/node/' . $handle->{id};
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
@@ -486,7 +486,8 @@ sub set_public_read
 
                 warn "setting read ACL on $nodeurl for public";
 
-		my $req = new HTTP::Request("PUT", $nodeurl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
+		my $publicReadUrl = $handle->{url} . '/node/' . $handle->{id} . "/acl/public_read";
+		my $req = new HTTP::Request("PUT", $publicReadUrl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
