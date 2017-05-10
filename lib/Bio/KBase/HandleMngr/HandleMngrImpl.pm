@@ -3,7 +3,9 @@ use strict;
 use Bio::KBase::Exceptions;
 # Use Semantic Versioning (2.0.0-rc.1)
 # http://semver.org 
-our $VERSION = "0.1.0";
+our $VERSION = "0.2.0";
+our $GIT_URL = "https://github.com/kkellerlbl/handle_mngr";
+our $GIT_COMMIT_HASH = "ce13d245839b54a7db48b3befd5ce0f47d07757b";
 
 =head1 NAME
 
@@ -71,6 +73,19 @@ sub new
 	if (ref $self->{handle_url} eq 'ARRAY') {
 		$self->{handle_url} = undef
 	}
+        unless ($self->{handle_url}) {
+            die 'no handle-service-url supplied, can not continue';
+        }           
+	
+	$self->{auth_svc} = $cfg->param('HandleMngr.auth-service-url');
+	if (ref $self->{auth_svc} eq 'ARRAY') {
+		$self->{auth_svc} = undef
+	}
+        unless ($self->{auth_svc}) {
+            $self->{auth_svc} = $Bio::KBase::Auth::AuthorizePathDefault;
+            warn 'no auth-service-url supplied, using default';
+        }
+        warn 'using auth-service-url ' . $self->{auth_svc};
 	
 	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
 	if (ref $allowed_users eq 'ARRAY') {
@@ -79,24 +94,43 @@ sub new
 	} else {
 		$self->{allowed_users} = [$allowed_users];
 	}
-	print STDERR "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . "]\n";
+	warn "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . ']';
 		
-	print STDERR "Creating admin token\n" ;
 	my $authtoken;
+        
+        # the number of simultaneous requests may be overloading the current
+        # auth service.  Occasionally I see read timeouts with the
+        # default AuthToken LWP timeout (10s).  There's no point in
+        # fixing the current auth service, so as a stopgap measure,
+        # try to spread out the requests so they're less likely to
+        # timeout.  When the new auth service is ready we should remove
+        # this sleep and make sure it performs okay (and if not, perhaps
+        # the issue is in the client libs)
+        sleep(int(rand(15)));
+
 	if ($token) {
-		$authtoken = Bio::KBase::AuthToken->new(token => $token);
-		if (!$authtoken->validate()) {
-			die "Login with admin-token failed: " . $authtoken->error_message;
-		}
-	} else {
+        	warn 'Creating admin token from supplied token';
 		$authtoken = Bio::KBase::AuthToken->new(
-		user_id => $login, password => $password);
-	}
+                    auth_svc=>$self->{'auth_svc'}, ignore_authrc=>1, token => $token);
+		if (!$authtoken->validate()) {
+			die "Login with admin token failed: " . $authtoken->error_message;
+		}
+	} elsif ($login and $password) {
+        	warn 'Creating admin token from username and password';
+		$authtoken = Bio::KBase::AuthToken->new(
+		    auth_svc=>$self->{'auth_svc'}, ignore_authrc=>1, user_id => $login, password => $password);
+	} else {
+            die 'No token or id/pw supplied, can not continue';
+        }
+
 	if (!defined($authtoken->token())) {
-		die "Login as $login failed.\n";
+                warn 'received an error from auth: ' . $authtoken->{'error_message'};
+		die "Login as $login failed in pid $$";
 	} else {
 		$self->{'admin-token'} = $authtoken->token();
 	}
+
+        warn "HandleMngr at pid $$ ready for queries";
 
     #END_CONSTRUCTOR
 
@@ -169,18 +203,26 @@ sub is_readable
     my($return);
     #BEGIN is_readable
 
-	print Dumper $ctx;
-	my $ua = LWP::UserAgent->new();
-	my $req = new HTTP::Request("GET",$nodeurl,HTTP::Headers->new('Authorization' => "OAuth $token"));
-    $ua->prepare_request($req);
-    my $get = $ua->send_request($req);
-    if ($get->is_success) {
-        $return = 1;
-	print STDERR "MSG (is_readable): " .  $get->content , "\n";
+#	print Dumper $ctx;
+    if ($nodeurl)
+    {
+        my $ua = LWP::UserAgent->new();
+        my $req = new HTTP::Request("GET",$nodeurl);
+        $req = new HTTP::Request("GET",$nodeurl,HTTP::Headers->new('Authorization' => "OAuth $token")) if ($token);
+        $ua->prepare_request($req);
+        my $get = $ua->send_request($req);
+        if ($get->is_success) {
+            $return = 1;
+            #warn "MSG (is_readable): " .  $get->content;
+        }
+        else{
+	    $return = 0;
+        }
+    } else
+    {
+        $return = 0;
     }
-    else{
-	$return = 0;
-    }
+
     #END is_readable
     my @_bad_returns;
     (!ref($return)) or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
@@ -284,20 +326,40 @@ sub add_read_acl
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
-		print STDERR Dumper $header ;
+
+                $ua->default_headers($header);
+
+                my $getResult = $ua->get($nodeurl."/acl?verbosity=full");
+                if (!$getResult->is_success) {
+			$succeeded{$handle->{hid}} = 0;
+			warn "Error: " . $getResult->message;
+			warn "Error: " . $getResult->content;
+                        next;                    
+                }
+                
+                my $jsonAcls=from_json($getResult->content);
+                my $users=$jsonAcls->{'data'}{'read'};
+                
+                if (grep { $_->{'username'} eq $username } @$users) {
+		    $succeeded{$handle->{hid}} = 1;
+                    warn "$username already has read access on $nodeurl, skipping PUT";
+                    next;
+                }
+
+                warn "setting read ACL on $nodeurl for $username";
 
 		my $req = new HTTP::Request("PUT",$nodeurl."/acl/read?users=$username",HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
 			$succeeded{$handle->{hid}} = 1;
-			print STDERR "Success: " . $put->message , "\n" ;
-			print STDERR "Success: " . $put->content , "\n";
+			warn "Success: " . $put->message;
+			warn "Success: " . $put->content;
 		}
 		else {
 			$succeeded{$handle->{hid}} = 0;
-			print STDERR "Error: " . $put->message , "\n" ;
-			print STDERR "Error: " . $put->content , "\n";
+			warn "Error: " . $put->message;
+			warn "Error: " . $put->content;
 		}
 	}
 	my @failed = ();
@@ -399,24 +461,44 @@ sub set_public_read
 	my %succeeded;
 	foreach my $handle (@$handles) {
 
-		my $nodeurl = $handle->{url} . '/node/' . $handle->{id} . "/acl/public_read";
+		my $nodeurl = $handle->{url} . '/node/' . $handle->{id};
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
-		print STDERR Dumper $header ;
 
-		my $req = new HTTP::Request("PUT", $nodeurl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
+                $ua->default_headers($header);
+
+                my $getResult = $ua->get($nodeurl."/acl?verbosity=full");
+                if (!$getResult->is_success) {
+			$succeeded{$handle->{hid}} = 0;
+			warn "Error: " . $getResult->message;
+			warn "Error: " . $getResult->content;
+                        next;                    
+                }
+
+                my $jsonAcls=from_json($getResult->content);
+
+                if ($jsonAcls->{'data'}{'public'}{'read'}) {
+		    $succeeded{$handle->{hid}} = 1;
+                    warn "public already has read access on $nodeurl, skipping PUT";
+                    next;
+                }
+
+                warn "setting read ACL on $nodeurl for public";
+
+		my $publicReadUrl = $handle->{url} . '/node/' . $handle->{id} . "/acl/public_read";
+		my $req = new HTTP::Request("PUT", $publicReadUrl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
 			$succeeded{$handle->{hid}} = 1;
-			print STDERR "Success: " . $put->message , "\n" ;
-			print STDERR "Success: " . $put->content , "\n";
+			warn "Success: " . $put->message;
+			warn "Success: " . $put->content;
 		}
 		else {
 			$succeeded{$handle->{hid}} = 0;
-			print STDERR "Error: " . $put->message , "\n" ;
-			print STDERR "Error: " . $put->content , "\n";
+			warn "Error: " . $put->message;
+			warn "Error: " . $put->content;
 		}
 	}
 	my @failed = ();
@@ -435,9 +517,9 @@ sub set_public_read
 
 
 
-=head2 version 
+=head2 status 
 
-  $return = $obj->version()
+  $return = $obj->status()
 
 =over 4
 
@@ -459,14 +541,19 @@ $return is a string
 
 =item Description
 
-Return the module version. This is a Semantic Versioning number.
+Return the module status. This is a structure including Semantic Versioning number, state and git info.
 
 =back
 
 =cut
 
-sub version {
-    return $VERSION;
+sub status {
+    my($return);
+    #BEGIN_STATUS
+    $return = {"state" => "OK", "message" => "", "version" => $VERSION,
+               "git_url" => $GIT_URL, "git_commit_hash" => $GIT_COMMIT_HASH};
+    #END_STATUS
+    return($return);
 }
 
 =head1 TYPES
