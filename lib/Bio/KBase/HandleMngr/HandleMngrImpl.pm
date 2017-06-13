@@ -106,7 +106,8 @@ sub new
         # timeout.  When the new auth service is ready we should remove
         # this sleep and make sure it performs okay (and if not, perhaps
         # the issue is in the client libs)
-        sleep(int(rand(15)));
+	# auth2 is now in place in production, so commenting out this sleep
+	# sleep(int(rand(15)));
 
 	if ($token) {
         	warn 'Creating admin token from supplied token';
