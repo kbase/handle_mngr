@@ -1,17 +1,22 @@
 TOP_DIR = ../..
+LIB_DIR = lib/
 DEPLOY_RUNTIME ?= /kb/runtime
 TARGET ?= /kb/deployment
 include $(TOP_DIR)/tools/Makefile.common
 
-SERVICE_SPEC = handle_mngr.spec
+SPEC_FILE = handle_mngr.spec
 SERVICE_NAME = HandleMngr
+SERVICE_CAPS = HandleMngr
 SERVICE_PORT = 9001
 SERVICE_DIR  = handle_mngr
+SERVICE_CONFIG  = HandleMngr
 
-SHOCK_ADMIN_TOKEN = 'un=kbasetest|tokenid=26f14ce2-1d60-11e4-b3ab-22000ab68755|expiry=1438861953|client_id=kbasetest|token_type=Bearer|SigningSubject=https://nexus.api.globusonline.org/goauth/keys/ddec0be2-19a2-11e4-9fd3-123139141556|sig=bc091d236472209e8aecf63f13beb84aaf9e79d6c4f65e51df780ed25fb9458540ffec1ed3962a0e7f087e6d01b4df51aba6847263638e1a118e08af3230bda2dcdf587a029d573cc7ff675e5b79d0ba0ce81f233377d88a1236ade0459d5a7272c41aef08170cea471649ca8bff17d0361ec150610ada343adfede4c0d3800e'
+ifeq ($(SELF_URL),)
+        SELF_URL = http://localhost:$(SERVICE_PORT)
+endif
 
 SERVICE_PSGI = $(SERVICE_NAME).psgi
-TPAGE_ARGS = --define kb_runas_user=$(SERVICE_USER) --define kb_top=$(TARGET) --define kb_runtime=$(DEPLOY_RUNTIME) --define kb_service_name=$(SERVICE_NAME) --define kb_service_dir=$(SERVICE_DIR) --define kb_service_port=$(SERVICE_PORT) --define kb_psgi=$(SERVICE_PSGI) --define shock_admin_token=$(SHOCK_ADMIN_TOKEN)
+TPAGE_ARGS = --define kb_runas_user=$(SERVICE_USER) --define kb_top=$(TARGET) --define kb_runtime=$(DEPLOY_RUNTIME) --define kb_service_name=$(SERVICE_NAME) --define kb_service_config_stanza=$(SERVICE_CONFIG) --define kb_service_dir=$(SERVICE_DIR) --define kb_service_port=$(SERVICE_PORT) --define kb_psgi=$(SERVICE_PSGI)
 
 # to wrap scripts and deploy them to $(TARGET)/bin using tools in
 # the dev_container. right now, these vars are defined in
@@ -271,7 +276,6 @@ deploy-service: deploy-cfg
 	$(TPAGE) $(TPAGE_ARGS) service/upstart.tt > service/$(SERVICE_NAME).conf
 	chmod +x service/$(SERVICE_NAME).conf
 	$(TPAGE) $(TPAGE_ARGS) service/constants.tt > $(TARGET)/lib/Bio/KBase/HandleMngrConstants.pm
-	echo "token used: $(SHOCK_ADMIN_TOKEN)"
 	echo "done executing deploy-service target"
 
 deploy-upstart: deploy-service
@@ -312,14 +316,15 @@ compile-docs: build-libs
 # target depends on the compiled libs.
 
 build-libs:
-	compile_typespec \
-		--psgi $(SERVICE_PSGI)  \
-		--impl Bio::KBase::$(SERVICE_NAME)::$(SERVICE_NAME)Impl \
-		--service Bio::KBase::$(SERVICE_NAME)::Service \
-		--client Bio::KBase::$(SERVICE_NAME)::Client \
-		--py biokbase/$(SERVICE_NAME)/Client \
-		--js javascript/$(SERVICE_NAME)/Client \
-		$(SERVICE_SPEC) lib
+	kb-sdk compile $(SPEC_FILE) \
+                --out $(LIB_DIR) \
+		--plpsginame $(SERVICE_CAPS).psgi  \
+		--plimplname Bio::KBase::$(SERVICE_CAPS)::$(SERVICE_CAPS)Impl \
+		--plsrvname Bio::KBase::$(SERVICE_CAPS)::Service \
+		--plclname Bio::KBase::$(SERVICE_CAPS)::Client \
+		--pyclname biokbase/$(SERVICE_CAPS)/Client \
+		--jsclname javascript/$(SERVICE_CAPS)/Client \
+                --url $(SELF_URL)
 
 # the Makefile.common.rules contains a set of rules that can be used
 # in this setup. Because it is included last, it has the effect of

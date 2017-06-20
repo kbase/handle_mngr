@@ -3,7 +3,9 @@ use strict;
 use Bio::KBase::Exceptions;
 # Use Semantic Versioning (2.0.0-rc.1)
 # http://semver.org 
-our $VERSION = "0.1.0";
+our $VERSION = "0.2.0";
+our $GIT_URL = "https://github.com/kkellerlbl/handle_mngr";
+our $GIT_COMMIT_HASH = "ce13d245839b54a7db48b3befd5ce0f47d07757b";
 
 =head1 NAME
 
@@ -53,7 +55,7 @@ sub new
 		print STDERR "Can't find config.\n" ;
 	}
 
-	my $login    = $cfg->param('HandleMngr.admin-login');
+	my $login = $cfg->param('HandleMngr.admin-login');
 	if (ref $login eq 'ARRAY') {
 		$login = undef;
 	}
@@ -61,11 +63,29 @@ sub new
 	if (ref $password eq 'ARRAY') {
 		$password = undef;
 	}
+
+	my $token = $cfg->param('HandleMngr.admin-token');
+	if (ref $token eq 'ARRAY') {
+		$token = undef;
+	}
 	
 	$self->{handle_url} = $cfg->param('HandleMngr.handle-service-url');
 	if (ref $self->{handle_url} eq 'ARRAY') {
 		$self->{handle_url} = undef
 	}
+        unless ($self->{handle_url}) {
+            die 'no handle-service-url supplied, can not continue';
+        }           
+	
+	$self->{auth_svc} = $cfg->param('HandleMngr.auth-service-url');
+	if (ref $self->{auth_svc} eq 'ARRAY') {
+		$self->{auth_svc} = undef
+	}
+        unless ($self->{auth_svc}) {
+            $self->{auth_svc} = $Bio::KBase::Auth::AuthorizePathDefault;
+            warn 'no auth-service-url supplied, using default';
+        }
+        warn 'using auth-service-url ' . $self->{auth_svc};
 	
 	my $allowed_users = $cfg->param('HandleMngr.allowed-users');
 	if (ref $allowed_users eq 'ARRAY') {
@@ -74,16 +94,44 @@ sub new
 	} else {
 		$self->{allowed_users} = [$allowed_users];
 	}
-	print STDERR "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . "]\n";
+	warn "Allowed users: [" . join(" ", @{$self->{allowed_users}}) . ']';
 		
-	print STDERR "Creating admin token\n" ;
-	my $token = Bio::KBase::AuthToken->new(
-		user_id => $login, password => $password);
-	if (!defined($token->token())) {
-		die "Login as $login failed.\n";
+	my $authtoken;
+        
+        # the number of simultaneous requests may be overloading the current
+        # auth service.  Occasionally I see read timeouts with the
+        # default AuthToken LWP timeout (10s).  There's no point in
+        # fixing the current auth service, so as a stopgap measure,
+        # try to spread out the requests so they're less likely to
+        # timeout.  When the new auth service is ready we should remove
+        # this sleep and make sure it performs okay (and if not, perhaps
+        # the issue is in the client libs)
+	# auth2 is now in place in production, so commenting out this sleep
+	# sleep(int(rand(15)));
+
+	if ($token) {
+        	warn 'Creating admin token from supplied token';
+		$authtoken = Bio::KBase::AuthToken->new(
+                    auth_svc=>$self->{'auth_svc'}, ignore_authrc=>1, token => $token);
+		if (!$authtoken->validate()) {
+			die "Login with admin token failed: " . $authtoken->error_message;
+		}
+	} elsif ($login and $password) {
+        	warn 'Creating admin token from username and password';
+		$authtoken = Bio::KBase::AuthToken->new(
+		    auth_svc=>$self->{'auth_svc'}, ignore_authrc=>1, user_id => $login, password => $password);
 	} else {
-		$self->{'admin-token'} = $token->token();
+            die 'No token or id/pw supplied, can not continue';
+        }
+
+	if (!defined($authtoken->token())) {
+                warn 'received an error from auth: ' . $authtoken->{'error_message'};
+		die "Login as $login failed in pid $$";
+	} else {
+		$self->{'admin-token'} = $authtoken->token();
 	}
+
+        warn "HandleMngr at pid $$ ready for queries";
 
     #END_CONSTRUCTOR
 
@@ -156,18 +204,26 @@ sub is_readable
     my($return);
     #BEGIN is_readable
 
-	print Dumper $ctx;
-	my $ua = LWP::UserAgent->new();
-	my $req = new HTTP::Request("GET",$nodeurl,HTTP::Headers->new('Authorization' => "OAuth $token"));
-    $ua->prepare_request($req);
-    my $get = $ua->send_request($req);
-    if ($get->is_success) {
-        $return = 1;
-	print STDERR "MSG (is_readable): " .  $get->content , "\n";
+#	print Dumper $ctx;
+    if ($nodeurl)
+    {
+        my $ua = LWP::UserAgent->new();
+        my $req = new HTTP::Request("GET",$nodeurl);
+        $req = new HTTP::Request("GET",$nodeurl,HTTP::Headers->new('Authorization' => "OAuth $token")) if ($token);
+        $ua->prepare_request($req);
+        my $get = $ua->send_request($req);
+        if ($get->is_success) {
+            $return = 1;
+            #warn "MSG (is_readable): " .  $get->content;
+        }
+        else{
+	    $return = 0;
+        }
+    } else
+    {
+        $return = 0;
     }
-    else{
-	$return = 0;
-    }
+
     #END is_readable
     my @_bad_returns;
     (!ref($return)) or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
@@ -214,7 +270,10 @@ HandleId is a string
 
 =item Description
 
-
+The add_read_acl function will update the acl of the shock
+node that the handle references. The function is only accessible to a 
+specific list of users specified at startup time. The underlying
+shock node will be made readable to the user requested.
 
 =back
 
@@ -268,20 +327,40 @@ sub add_read_acl
 		my $ua = LWP::UserAgent->new();
 
 		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
-		print STDERR Dumper $header ;
+
+                $ua->default_headers($header);
+
+                my $getResult = $ua->get($nodeurl."/acl?verbosity=full");
+                if (!$getResult->is_success) {
+			$succeeded{$handle->{hid}} = 0;
+			warn "Error: " . $getResult->message;
+			warn "Error: " . $getResult->content;
+                        next;                    
+                }
+                
+                my $jsonAcls=from_json($getResult->content);
+                my $users=$jsonAcls->{'data'}{'read'};
+                
+                if (grep { $_->{'username'} eq $username } @$users) {
+		    $succeeded{$handle->{hid}} = 1;
+                    warn "$username already has read access on $nodeurl, skipping PUT";
+                    next;
+                }
+
+                warn "setting read ACL on $nodeurl for $username";
 
 		my $req = new HTTP::Request("PUT",$nodeurl."/acl/read?users=$username",HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
 		$ua->prepare_request($req);
 		my $put = $ua->send_request($req);
 		if ($put->is_success) {
 			$succeeded{$handle->{hid}} = 1;
-			print STDERR "Success: " . $put->message , "\n" ;
-			print STDERR "Success: " . $put->content , "\n";
+			warn "Success: " . $put->message;
+			warn "Success: " . $put->content;
 		}
 		else {
 			$succeeded{$handle->{hid}} = 0;
-			print STDERR "Error: " . $put->message , "\n" ;
-			print STDERR "Error: " . $put->content , "\n";
+			warn "Error: " . $put->message;
+			warn "Error: " . $put->content;
 		}
 	}
 	my @failed = ();
@@ -302,9 +381,146 @@ sub add_read_acl
 
 
 
-=head2 version 
+=head2 set_public_read
 
-  $return = $obj->version()
+  $obj->set_public_read($hids)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$hids is a reference to a list where each element is a HandleMngr.HandleId
+HandleId is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$hids is a reference to a list where each element is a HandleMngr.HandleId
+HandleId is a string
+
+
+=end text
+
+
+
+=item Description
+
+The set_public_read function will update the acl of the shock
+node that the handle references to make the node globally readable.
+The function is only accessible to a specific list of users specified
+at startup time.
+
+=back
+
+=cut
+
+sub set_public_read
+{
+    my $self = shift;
+    my($hids) = @_;
+
+    my @_bad_arguments;
+    (ref($hids) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"hids\" (value was \"$hids\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to set_public_read:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'set_public_read');
+    }
+
+    my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
+    #BEGIN set_public_read
+
+	my $has_user = 0;
+	foreach my $user (@{$self->{allowed_users}}) {
+		if ($user eq $ctx->{user_id}) {
+			$has_user = 1;
+			last;
+		}
+	}
+	if (!$has_user) {
+		die "User $ctx->{user_id} may not run the set_public_read method"
+	}
+	
+
+	my $client;
+	# given a list of handle ids, get the handles
+	if ($self->{handle_url}) {
+		$client = Bio::KBase::HandleService->new($self->{handle_url});
+	} else {
+		$client = Bio::KBase::HandleService->new();
+	}
+	my $handles = $client->hids_to_handles($hids);
+	
+	# given a list of handles, update the acl of handle->{id}
+	my $admin_token = $self->{'admin-token'};
+	my %succeeded;
+	foreach my $handle (@$handles) {
+
+		my $nodeurl = $handle->{url} . '/node/' . $handle->{id};
+		my $ua = LWP::UserAgent->new();
+
+		my $header = HTTP::Headers->new('Authorization' => "OAuth " . $admin_token) ;
+
+                $ua->default_headers($header);
+
+                my $getResult = $ua->get($nodeurl."/acl?verbosity=full");
+                if (!$getResult->is_success) {
+			$succeeded{$handle->{hid}} = 0;
+			warn "Error: " . $getResult->message;
+			warn "Error: " . $getResult->content;
+                        next;                    
+                }
+
+                my $jsonAcls=from_json($getResult->content);
+
+                if ($jsonAcls->{'data'}{'public'}{'read'}) {
+		    $succeeded{$handle->{hid}} = 1;
+                    warn "public already has read access on $nodeurl, skipping PUT";
+                    next;
+                }
+
+                warn "setting read ACL on $nodeurl for public";
+
+		my $publicReadUrl = $handle->{url} . '/node/' . $handle->{id} . "/acl/public_read";
+		my $req = new HTTP::Request("PUT", $publicReadUrl, HTTP::Headers->new('Authorization' => "OAuth " . $admin_token));
+		$ua->prepare_request($req);
+		my $put = $ua->send_request($req);
+		if ($put->is_success) {
+			$succeeded{$handle->{hid}} = 1;
+			warn "Success: " . $put->message;
+			warn "Success: " . $put->content;
+		}
+		else {
+			$succeeded{$handle->{hid}} = 0;
+			warn "Error: " . $put->message;
+			warn "Error: " . $put->content;
+		}
+	}
+	my @failed = ();
+	foreach my $hid (@$hids) {
+		if (!($succeeded{$hid})) {
+			push @failed, $hid;
+		}
+	}
+	if (@failed) {
+		die "Unable to set acl(s) on handles " . join(", ", @failed);
+	}
+    #END set_public_read
+    return();
+}
+
+
+
+
+=head2 status 
+
+  $return = $obj->status()
 
 =over 4
 
@@ -326,14 +542,19 @@ $return is a string
 
 =item Description
 
-Return the module version. This is a Semantic Versioning number.
+Return the module status. This is a structure including Semantic Versioning number, state and git info.
 
 =back
 
 =cut
 
-sub version {
-    return $VERSION;
+sub status {
+    my($return);
+    #BEGIN_STATUS
+    $return = {"state" => "OK", "message" => "", "version" => $VERSION,
+               "git_url" => $GIT_URL, "git_commit_hash" => $GIT_COMMIT_HASH};
+    #END_STATUS
+    return($return);
 }
 
 =head1 TYPES
@@ -344,14 +565,6 @@ sub version {
 
 =over 4
 
-
-
-=item Description
-
-The add_read_acl functions will update the acl of the shock
-node that the handle references. The function is only accessible to a 
-specific list of users specified at startup time. The underlying
-shock node will be made readable to the user requested.
 
 
 =item Definition

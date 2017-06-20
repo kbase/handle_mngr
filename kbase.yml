@@ -1,0 +1,15 @@
+# This file exists only to populate the version in the Impl file.
+module-name:
+    HandleMngr
+
+module-description:
+    Core KBase service that manages ACLs on Handle objects.
+
+service-language:
+    perl
+
+module-version:
+    0.2.0
+
+owners:
+    [kkeller, scanon, mrcreosote]

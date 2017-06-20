@@ -6,3 +6,5 @@ lib/Bio/KBase/HandleMngr/Service.pm
 lib/HandleMngr.psgi
 lib/HandleMngrImpl.py.bak-*
 lib/HandleMngrServer.py
+/deploy-test.cfg
+/src/
