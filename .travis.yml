@@ -1,0 +1,11 @@
+language: bash
+sudo: required
+services:
+  - docker
+before_script:
+  - sudo apt-get update && sudo apt-get install git
+  - docker pull kbase/kb_perl:latest
+script:
+  - make -f Makefile.mini docker_image
+after_success:
+  - make push_image
