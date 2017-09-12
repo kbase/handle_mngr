@@ -6,7 +6,7 @@
 # 2) The perl template toolkit ( use cpanm Template to install)
 #
 # This is the name for the docker image to be generated
-IMAGE_NAME := "kbase/handle_mgr"
+IMAGE_NAME := "kbase/handle_mngr"
 
 # Path to tpage executable
 TPAGE := "tpage"

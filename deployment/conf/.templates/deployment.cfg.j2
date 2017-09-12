@@ -1,0 +1,10 @@
+[HandleMngr]
+service-host={{ service_host|default('127.0.0.1') }}
+service-port={{ service_port|default('9001') }}
+handle-service-url={{ handle_service_url|default('https://ci.kbase.us/services/handleservice/') }}
+allowed-users={{ allowed_users|default('ciservices') }}
+admin-token={{ admin_token|default('')}}
+basedir={{ basedir|default('handle_mngr') }}
+# The KBase authorization server url.
+auth-service-url={{ auth_service_dir|default('https://ci.kbase.us/services/auth/api/legacy/KBase/Sessions/Login') }}
+
