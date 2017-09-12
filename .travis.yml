@@ -10,9 +10,10 @@ install:
 - sudo apt-get install -y git perl cpanminus libtemplate-perl
 
 script:
-- make
+- make -f Makefile.mini docker_image
+
 after_success:
-- make push_image
+- make -f Makefile.mini push_image
 env:
   global:
   - secure: tOjfwQREACIpwFmqfodj+yOrDgM9yL3TM8sL53/otVksAsIygGblQLDd/rxfAr/GEAyRdVDRuiu6dMo5EMB73hongonnLNUsZeUXVONcN4WrSdJa5fkiCbMtAos3VxsslM+eSfLTbO41WVaQ+hpR48yATMJnGfGqnLWUlfrwucM=
