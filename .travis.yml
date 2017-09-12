@@ -7,8 +7,7 @@ services:
 
 install:
 - sudo apt-get update
-- sudo apt-get install -y git perl cpanminus
-- sudo cpanm Template::Tools
+- sudo apt-get install -y git perl cpanminus libtemplate-perl
 
 script:
 - make
