@@ -1,11 +1,15 @@
-language: bash
+language: perl
 sudo: required
 services:
-  - docker
+- docker
 before_script:
-  - sudo apt-get update && sudo apt-get install git
-  - docker pull kbase/kb_perl:latest
+- sudo apt-get update && sudo apt-get install git
+- cpanm Template::Tools::tpage
 script:
-  - make -f Makefile.mini docker_image
+- make
 after_success:
-  - make push_image
+- make push_image
+env:
+  global:
+  - secure: tOjfwQREACIpwFmqfodj+yOrDgM9yL3TM8sL53/otVksAsIygGblQLDd/rxfAr/GEAyRdVDRuiu6dMo5EMB73hongonnLNUsZeUXVONcN4WrSdJa5fkiCbMtAos3VxsslM+eSfLTbO41WVaQ+hpR48yATMJnGfGqnLWUlfrwucM=
+  - secure: bCfR4/P4o1K53PlqW2INWa0pdW8NbORlh68Lm2eW+wvCtkewp0LC5AVIY0Hnj7oufNq37jkmsri5YTo2psd4+uzJC/Ed0sL+J7Na0aD60HSu/TYRXEXZa5OrHb7XPc1knxfBTc6eI6ar1ejHd5V+1nc4U64IuWn9vMGzi0d0LlY=
