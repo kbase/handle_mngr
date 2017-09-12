@@ -1,6 +1,4 @@
-language: perl
-perl:
-- "5.24"
+language: bash
 
 sudo: required
 
@@ -8,10 +6,10 @@ services:
 - docker
 
 install:
-- cpanm Template::Tools::tpage
+- sudo apt-get update
+- sudo apt-get install -y git perl cpanminus
+- sudo cpanm Template::Tools::tpage
 
-before_script:
-- sudo apt-get update && sudo apt-get install git
 script:
 - make
 after_success:
