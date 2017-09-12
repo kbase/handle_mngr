@@ -6,9 +6,12 @@ sudo: required
 
 services:
 - docker
+
+install:
+- cpanm Template::Tools::tpage
+
 before_script:
 - sudo apt-get update && sudo apt-get install git
-- cpanm Template::Tools::tpage
 script:
 - make
 after_success:
