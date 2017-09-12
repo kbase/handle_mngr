@@ -1,0 +1,20 @@
+language: bash
+
+sudo: required
+
+services:
+- docker
+
+install:
+- sudo apt-get update
+- sudo apt-get install -y git perl cpanminus libtemplate-perl
+
+script:
+- make -f Makefile.mini docker_image
+
+after_success:
+- make -f Makefile.mini push_image
+env:
+  global:
+  - secure: tOjfwQREACIpwFmqfodj+yOrDgM9yL3TM8sL53/otVksAsIygGblQLDd/rxfAr/GEAyRdVDRuiu6dMo5EMB73hongonnLNUsZeUXVONcN4WrSdJa5fkiCbMtAos3VxsslM+eSfLTbO41WVaQ+hpR48yATMJnGfGqnLWUlfrwucM=
+  - secure: bCfR4/P4o1K53PlqW2INWa0pdW8NbORlh68Lm2eW+wvCtkewp0LC5AVIY0Hnj7oufNq37jkmsri5YTo2psd4+uzJC/Ed0sL+J7Na0aD60HSu/TYRXEXZa5OrHb7XPc1knxfBTc6eI6ar1ejHd5V+1nc4U64IuWn9vMGzi0d0LlY=

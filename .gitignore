@@ -8,3 +8,5 @@ lib/HandleMngrImpl.py.bak-*
 lib/HandleMngrServer.py
 /deploy-test.cfg
 /src/
+/deployment/lib
+/deployment/services
