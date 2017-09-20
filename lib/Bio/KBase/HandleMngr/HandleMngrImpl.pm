@@ -200,7 +200,7 @@ sub is_readable
 							       method_name => 'is_readable');
     }
 
-    my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
+    my $ctx = $Bio::KBase::HandleMngr::HandleMngrServer::CallContext;
     my($return);
     #BEGIN is_readable
 
@@ -293,7 +293,7 @@ sub add_read_acl
 							       method_name => 'add_read_acl');
     }
 
-    my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
+    my $ctx = $Bio::KBase::HandleMngr::HandleMngrServer::CallContext;
     #BEGIN add_read_acl
 
 	my $has_user = 0;
@@ -433,7 +433,7 @@ sub set_public_read
 							       method_name => 'set_public_read');
     }
 
-    my $ctx = $Bio::KBase::HandleMngr::Service::CallContext;
+    my $ctx = $Bio::KBase::HandleMngr::HandleMngrServer::CallContext;
     #BEGIN set_public_read
 
 	my $has_user = 0;
