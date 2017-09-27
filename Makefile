@@ -297,7 +297,7 @@ deploy-docs: build-docs
 
 build-docs: compile-docs
 	-mkdir -p docs
-	pod2html --infile=lib/Bio/KBase/$(SERVICE_NAME)/Client.pm --outfile=docs/$(SERVICE_NAME).html
+	pod2html --infile=lib/Bio/KBase/$(SERVICE_NAME)/$(SERVICE_CAPS)Client.pm --outfile=docs/$(SERVICE_NAME).html
 
 # Use the compile-docs target if you want to unlink the generation of
 # the docs from the generation of the libs. Not recommended, but there
