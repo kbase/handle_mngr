@@ -89,4 +89,4 @@ export KB_DEPLOYMENT_CONFIG=$DIR/../conf/deployment.cfg
 
 # Try to expand the template and then startup the jetty server if only that succeeds
 ${J2} $TEMPLATE $DATA_SRC > $KB_DEPLOYMENT_CONFIG && \
-starman --listen :7109  $DIR/../lib/Bio/KBase/HandleMngr/HandleMngr.psgi
+starman --listen :9001  $DIR/../lib/Bio/KBase/HandleMngr/HandleMngr.psgi
