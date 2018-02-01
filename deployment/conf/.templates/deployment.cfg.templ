@@ -1,0 +1,10 @@
+[HandleMngr]
+service-host={{ default .Env.service_host "127.0.0.1" }}
+service-port={{ default .Env.service_port "9001" }}
+handle-service-url={{ default .Env.handle_service_url "https://ci.kbase.us/services/handleservice/" }}
+allowed-users={{ default .Env.allowed_users "ciservices" }}
+admin-token={{ default .Env.admin_token ""}}
+basedir={{ default .Env.basedir "handle_mngr" }}
+# The KBase authorization server url.
+auth-service-url={{ default .Env.auth_service_url "https://ci.kbase.us/services/auth/api/legacy/KBase/Sessions/Login" }}
+

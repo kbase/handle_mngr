@@ -297,7 +297,7 @@ deploy-docs: build-docs
 
 build-docs: compile-docs
 	-mkdir -p docs
-	pod2html --infile=lib/Bio/KBase/$(SERVICE_NAME)/Client.pm --outfile=docs/$(SERVICE_NAME).html
+	pod2html --infile=lib/Bio/KBase/$(SERVICE_NAME)/$(SERVICE_CAPS)Client.pm --outfile=docs/$(SERVICE_NAME).html
 
 # Use the compile-docs target if you want to unlink the generation of
 # the docs from the generation of the libs. Not recommended, but there
@@ -320,8 +320,8 @@ build-libs:
                 --out $(LIB_DIR) \
 		--plpsginame $(SERVICE_CAPS).psgi  \
 		--plimplname Bio::KBase::$(SERVICE_CAPS)::$(SERVICE_CAPS)Impl \
-		--plsrvname Bio::KBase::$(SERVICE_CAPS)::Service \
-		--plclname Bio::KBase::$(SERVICE_CAPS)::Client \
+		--plsrvname Bio::KBase::$(SERVICE_CAPS)::$(SERVICE_CAPS)Server \
+		--plclname Bio::KBase::$(SERVICE_CAPS)::$(SERVICE_CAPS)Client \
 		--pyclname biokbase/$(SERVICE_CAPS)/Client \
 		--jsclname javascript/$(SERVICE_CAPS)/Client \
                 --url $(SELF_URL)
